@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getCategoryFallbackUrls } from "./categoryFallbacks";
+import { runFfmpeg } from "./ffmpeg";
 import { getImageDimensions } from "./ffprobe";
 import { selectImageCount } from "./extractArticleImages";
 
@@ -100,20 +101,15 @@ export async function ensureMinimumImages(
   const dir = path.join(process.cwd(), "public", "generated", "images", articleId);
   await mkdir(dir, { recursive: true });
 
-  const { execFile } = await import("child_process");
-  const { promisify } = await import("util");
-  const execFileAsync = promisify(execFile);
-
   const colors = ["0x0d1b2a", "0x1b263b", "0x111827"];
   const generated: string[] = [];
 
   for (let i = 0; i < 3; i++) {
     const outPath = path.join(dir, `fallback-${i}.jpg`);
     try {
-      await execFileAsync(
-        "ffmpeg",
+      await runFfmpeg(
         ["-y", "-f", "lavfi", "-i", `color=c=${colors[i]}:s=1920x1080:d=1`, "-frames:v", "1", outPath],
-        { timeout: 20000 }
+        { timeout: 20000, label: `fallback image ${i + 1}` }
       );
       generated.push(outPath);
     } catch {

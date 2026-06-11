@@ -5,6 +5,7 @@ import { extractArticleImages } from "../media/extractArticleImages";
 import { extractArticleVideos } from "../media/extractArticleVideos";
 import { downloadImages, ensureMinimumImages } from "../media/downloadImages";
 import { downloadSourceVideos } from "../media/downloadSourceVideos";
+import { verifyFfmpegAvailable } from "../media/ffmpeg";
 import { getAudioDurationSeconds, estimateSpeechDuration } from "../media/ffprobe";
 import {
   parseSubtitles,
@@ -56,6 +57,9 @@ export async function generateTikTokVideo(
   input: VideoGenerationInput
 ): Promise<VideoGenerationResult> {
   const { article, script, settings, audioPath } = input;
+
+  await verifyFfmpegAvailable(`articleId=${article.id}`);
+
   const videoDir = path.join(process.cwd(), "public", "generated", "videos");
   const tempDir = path.join(process.cwd(), "public", "generated", "temp", article.id);
   await mkdir(videoDir, { recursive: true });

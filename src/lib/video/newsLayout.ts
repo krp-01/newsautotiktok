@@ -1,11 +1,8 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { existsSync } from "fs";
 import path from "path";
 import type { SubtitleSegment } from "../ai/generateScript";
 import { categoryBadgeLabel } from "../ai/romanian";
-
-const execFileAsync = promisify(execFile);
+import { runFfmpeg } from "../media/ffmpeg";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
@@ -111,8 +108,7 @@ export async function createImageNewsSegment(
   duration: number,
   index: number
 ): Promise<void> {
-  await execFileAsync(
-    "ffmpeg",
+  await runFfmpeg(
     [
       "-y",
       "-loop",
@@ -128,7 +124,11 @@ export async function createImageNewsSegment(
       "yuv420p",
       outputPath,
     ],
-    { timeout: 120000, maxBuffer: 15 * 1024 * 1024 }
+    {
+      timeout: 120000,
+      maxBuffer: 15 * 1024 * 1024,
+      label: `segment ${index + 1} image`,
+    }
   );
 }
 
@@ -139,8 +139,7 @@ export async function createVideoNewsSegment(
   index: number,
   startAt = 0
 ): Promise<void> {
-  await execFileAsync(
-    "ffmpeg",
+  await runFfmpeg(
     [
       "-y",
       "-ss",
@@ -156,7 +155,11 @@ export async function createVideoNewsSegment(
       "yuv420p",
       outputPath,
     ],
-    { timeout: 180000, maxBuffer: 20 * 1024 * 1024 }
+    {
+      timeout: 180000,
+      maxBuffer: 20 * 1024 * 1024,
+      label: `segment ${index + 1} source-video`,
+    }
   );
 }
 
@@ -168,10 +171,9 @@ export async function concatSegments(segmentPaths: string[], outputPath: string)
     .join("\n");
   await writeFile(listPath, listContent, "utf-8");
 
-  await execFileAsync(
-    "ffmpeg",
+  await runFfmpeg(
     ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outputPath],
-    { timeout: 180000, maxBuffer: 15 * 1024 * 1024 }
+    { timeout: 180000, maxBuffer: 15 * 1024 * 1024, label: "concat segments" }
   );
 
   await unlink(listPath).catch(() => {});
@@ -243,7 +245,11 @@ export async function composeFinalNewsVideo(
 
   args.push("-t", String(options.duration), outputPath);
 
-  await execFileAsync("ffmpeg", args, { timeout: 240000, maxBuffer: 20 * 1024 * 1024 });
+  await runFfmpeg(args, {
+    timeout: 240000,
+    maxBuffer: 20 * 1024 * 1024,
+    label: "final compose",
+  });
 }
 
 export function clampVideoDuration(seconds: number): number {

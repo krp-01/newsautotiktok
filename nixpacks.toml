@@ -1,7 +1,10 @@
-# Railway/Nixpacks: use modern npm install flags and avoid deprecated `production` config.
+# Railway/Nixpacks: Node.js 20 + FFmpeg for video generation.
 [variables]
 NPM_CONFIG_PRODUCTION = ""
 NPM_CONFIG_OMIT = "dev"
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "ffmpeg"]
 
 [phases.install]
 cmds = ["npm ci --include=dev"]
@@ -9,5 +12,5 @@ cmds = ["npm ci --include=dev"]
 [phases.build]
 cmds = ["npm run build"]
 
-[phases.setup]
-nixPkgs = ["ffmpeg"]
+[start]
+cmd = "npm run start"

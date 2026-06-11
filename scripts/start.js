@@ -39,6 +39,7 @@ function startNextServer() {
   const port = process.env.PORT || "3000";
   const nextBin = path.join(require.resolve("next/package.json"), "..", "dist", "bin", "next");
 
+  console.log(`[start] PATH=${process.env.PATH || "(empty)"}`);
   console.log(`[start] Starting Next.js on 0.0.0.0:${port}`);
 
   const child = spawn(process.execPath, [nextBin, "start", "-H", "0.0.0.0", "-p", port], {
@@ -60,5 +61,22 @@ function startNextServer() {
   });
 }
 
+function verifyFfmpegAtStartup() {
+  const result = spawnSync("ffmpeg", ["-version"], {
+    encoding: "utf8",
+    env: process.env,
+  });
+
+  if (result.status === 0) {
+    const firstLine = (result.stdout || result.stderr || "").split("\n")[0]?.trim();
+    console.log(`[start] ffmpeg -version: ${firstLine || "ok"}`);
+    return;
+  }
+
+  console.error(`[start] ffmpeg not found at startup (PATH=${process.env.PATH || "(empty)"})`);
+  console.error("[start] Video generation will fail until ffmpeg is installed (see nixpacks.toml).");
+}
+
 runPrismaDbPush();
+verifyFfmpegAtStartup();
 startNextServer();
