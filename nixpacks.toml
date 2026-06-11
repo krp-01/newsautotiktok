@@ -1,0 +1,13 @@
+# Railway/Nixpacks: use modern npm install flags and avoid deprecated `production` config.
+[variables]
+NPM_CONFIG_PRODUCTION = ""
+NPM_CONFIG_OMIT = "dev"
+
+[phases.install]
+cmds = ["npm ci --include=dev"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[phases.setup]
+nixPkgs = ["ffmpeg"]
