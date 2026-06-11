@@ -8,12 +8,15 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && ffmpeg -version | head -n 1
 
-COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+# Prisma files must exist before postinstall / prisma generate.
+COPY package.json package-lock.json prisma.config.ts ./
+COPY prisma ./prisma
+
+# Skip postinstall here; prisma generate runs in `npm run build`.
+RUN npm ci --include=dev --ignore-scripts
 
 COPY . .
 
-# Build Next.js app (prisma generate runs inside npm run build).
 ARG DATABASE_URL=postgresql://build:build@localhost:5432/build
 ENV DATABASE_URL=$DATABASE_URL
 RUN npm run build
