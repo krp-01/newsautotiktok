@@ -21,6 +21,9 @@ export async function PATCH(
         category: body.category,
         active: body.active,
         autoMode: body.autoMode,
+        allowVideoExtraction: body.allowVideoExtraction,
+        allowedVideoDomains: body.allowedVideoDomains,
+        useSourceVideos: body.useSourceVideos,
       },
     });
 

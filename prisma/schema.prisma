@@ -64,16 +64,19 @@ model User {
 }
 
 model Source {
-  id        String    @id @default(cuid())
-  name      String
-  baseUrl   String
-  rssUrl    String
-  category  String    @default("general")
-  active    Boolean   @default(true)
-  autoMode  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  articles  Article[]
+  id                   String    @id @default(cuid())
+  name                 String
+  baseUrl              String
+  rssUrl               String
+  category             String    @default("general")
+  active               Boolean   @default(true)
+  autoMode             Boolean   @default(false)
+  allowVideoExtraction Boolean   @default(false)
+  allowedVideoDomains  String    @default("")
+  useSourceVideos      Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  articles             Article[]
 }
 
 model Article {
@@ -102,6 +105,8 @@ model GeneratedScript {
   hook             String
   script           String
   voiceoverScript  String   @default("")
+  headline         String   @default("")
+  shortSummary     String   @default("")
   tiktokTitle      String
   description      String
   hashtags         String
@@ -120,6 +125,7 @@ model GeneratedVideo {
   duration         Float?
   imageCount       Int      @default(0)
   downloadedImages String?
+  sourceVideoUsed  Boolean  @default(false)
   voiceoverSkipped Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

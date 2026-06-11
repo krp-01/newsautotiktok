@@ -1,8 +1,12 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getCategoryFallbackUrls } from "./categoryFallbacks";
+import { getImageDimensions } from "./ffprobe";
+import { selectImageCount } from "./extractArticleImages";
 
-const MIN_IMAGE_BYTES = 8000;
+const MIN_IMAGE_BYTES = 12000;
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 240;
 
 function guessExtension(url: string, contentType?: string): string {
   if (contentType?.includes("png")) return ".png";
@@ -52,19 +56,25 @@ export async function downloadImages(
   }
 
   const uniqueUrls = [...new Set(allUrls)];
+  const targetCount = selectImageCount(uniqueUrls.length);
   const localPaths: string[] = [];
   let attempted = 0;
 
-  for (let i = 0; i < uniqueUrls.length && localPaths.length < 6; i++) {
+  for (const url of uniqueUrls) {
+    if (localPaths.length >= targetCount) break;
     attempted++;
-    const url = uniqueUrls[i];
-    const destPath = path.join(dir, `img-${localPaths.length}${guessExtension(url)}`);
 
+    const destPath = path.join(dir, `img-${localPaths.length}${guessExtension(url)}`);
     const ok = await downloadOne(url, destPath);
-    if (ok) {
-      localPaths.push(destPath);
-      console.log(`[downloadImages] articleId=${articleId} saved ${destPath}`);
+    if (!ok) continue;
+
+    const dims = await getImageDimensions(destPath);
+    if (dims && (dims.width < MIN_WIDTH || dims.height < MIN_HEIGHT)) {
+      continue;
     }
+
+    localPaths.push(destPath);
+    console.log(`[downloadImages] articleId=${articleId} saved ${destPath}`);
   }
 
   const publicPaths = localPaths.map((p) => {
@@ -73,7 +83,7 @@ export async function downloadImages(
   });
 
   console.log(
-    `[downloadImages] articleId=${articleId} downloaded ${localPaths.length}/${attempted} image(s)`
+    `[downloadImages] articleId=${articleId} downloaded ${localPaths.length}/${attempted} image(s), target=${targetCount}`
   );
 
   return { localPaths, publicPaths, downloaded: localPaths.length, attempted };
@@ -82,7 +92,7 @@ export async function downloadImages(
 export async function ensureMinimumImages(
   articleId: string,
   localPaths: string[],
-  title: string,
+  _title: string,
   category: string
 ): Promise<string[]> {
   if (localPaths.length >= 1) return localPaths;
@@ -94,7 +104,7 @@ export async function ensureMinimumImages(
   const { promisify } = await import("util");
   const execFileAsync = promisify(execFile);
 
-  const colors = ["0x1a1a2e", "0x16213e", "0x0f3460"];
+  const colors = ["0x0d1b2a", "0x1b263b", "0x111827"];
   const generated: string[] = [];
 
   for (let i = 0; i < 3; i++) {
@@ -102,13 +112,7 @@ export async function ensureMinimumImages(
     try {
       await execFileAsync(
         "ffmpeg",
-        [
-          "-y",
-          "-f", "lavfi",
-          "-i", `color=c=${colors[i]}:s=1080x1920:d=1`,
-          "-frames:v", "1",
-          outPath,
-        ],
+        ["-y", "-f", "lavfi", "-i", `color=c=${colors[i]}:s=1920x1080:d=1`, "-frames:v", "1", outPath],
         { timeout: 20000 }
       );
       generated.push(outPath);

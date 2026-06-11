@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSession();
     const body = await request.json();
-    const { name, baseUrl, rssUrl, category, active, autoMode } = body;
+    const { name, baseUrl, rssUrl, category, active, autoMode, allowVideoExtraction, allowedVideoDomains, useSourceVideos } = body;
 
     if (!name || !baseUrl || !rssUrl) {
       return jsonError("name, baseUrl and rssUrl are required");
@@ -32,6 +32,9 @@ export async function POST(request: NextRequest) {
         category: category || "general",
         active: active ?? true,
         autoMode: autoMode ?? false,
+        allowVideoExtraction: allowVideoExtraction ?? false,
+        allowedVideoDomains: allowedVideoDomains || "",
+        useSourceVideos: useSourceVideos ?? false,
       },
     });
 

@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Video, ExternalLink, Image, Mic, MicOff, Clock } from "lucide-react";
+import { Video, ExternalLink, Image, Mic, MicOff, Clock, Download, Film } from "lucide-react";
 
 interface GeneratedVideo {
   id: string;
@@ -13,6 +13,7 @@ interface GeneratedVideo {
   audioPath: string | null;
   duration: number | null;
   imageCount: number;
+  sourceVideoUsed: boolean;
   voiceoverSkipped: boolean;
   createdAt: string;
   article: {
@@ -47,21 +48,21 @@ export default function VideosPage() {
     <div>
       <Header
         title="Videos"
-        description="Clipuri dinamice cu imagini multiple și voice-over"
+        description="Clipuri profesionale verticale cu layout news, voice-over și subtitrări"
       />
 
       {videos.length === 0 ? (
         <EmptyState
           icon={Video}
           title="Niciun video generat"
-          description="Generează script + video din secțiunea Articles."
+          description='Generează "script + professional video" din secțiunea Articles.'
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {videos.map((video) => (
             <div key={video.id} className="card overflow-hidden">
-              <div className="aspect-[9/16] max-h-80 bg-zinc-800">
-                <video src={video.videoPath} controls className="h-full w-full object-cover" />
+              <div className="aspect-[9/16] max-h-80 bg-zinc-900">
+                <video src={video.videoPath} controls className="h-full w-full object-contain" />
               </div>
               <div className="p-4">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -74,6 +75,12 @@ export default function VideosPage() {
                     <Clock className="h-3 w-3" />
                     {video.duration?.toFixed(0) ?? "?"}s
                   </span>
+                  <span
+                    className={`flex items-center gap-1 text-xs ${video.sourceVideoUsed ? "text-cyan-400" : "text-zinc-500"}`}
+                  >
+                    <Film className="h-3 w-3" />
+                    {video.sourceVideoUsed ? "Video sursă" : "Fără video sursă"}
+                  </span>
                   {video.voiceoverSkipped ? (
                     <span className="flex items-center gap-1 text-xs text-amber-400">
                       <MicOff className="h-3 w-3" />
@@ -82,7 +89,7 @@ export default function VideosPage() {
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-emerald-400">
                       <Mic className="h-3 w-3" />
-                      Voice-over
+                      Voice-over RO
                     </span>
                   )}
                 </div>
@@ -92,14 +99,20 @@ export default function VideosPage() {
                 <p className="mt-1 text-xs text-zinc-500">
                   {video.article.source.name} · {video.article.category}
                 </p>
-                <a
-                  href={video.videoPath}
-                  target="_blank"
-                  className="btn-secondary mt-3 w-full !text-xs"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Deschide video
-                </a>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <a
+                    href={video.videoPath}
+                    target="_blank"
+                    className="btn-secondary !text-xs"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Preview
+                  </a>
+                  <a href={video.videoPath} download className="btn-primary !text-xs">
+                    <Download className="h-3 w-3" />
+                    Download
+                  </a>
+                </div>
               </div>
             </div>
           ))}

@@ -1,5 +1,6 @@
 import type { Article } from "@/generated/prisma/client";
 import { getSettings } from "../settings";
+import { clampVoiceoverLength, isMostlyRomanian } from "./romanian";
 
 export interface SubtitleSegment {
   start: number;
@@ -9,24 +10,21 @@ export interface SubtitleSegment {
 
 export interface GeneratedScriptResult {
   hook: string;
-  /** Voice-over script (stored as `script` in DB) */
+  headline: string;
+  shortSummary: string;
   script: string;
   tiktokTitle: string;
-  /** TikTok description (stored as `description` in DB) */
   description: string;
   hashtags: string;
   subtitles: SubtitleSegment[];
   provider: "openai" | "mock";
 }
 
-/** Build usable text from article fields with fallbacks */
 export function getArticleSourceText(article: Article & { description?: string | null }): string {
   if (article.content?.trim()) return article.content.trim();
   if (article.description?.trim()) return article.description.trim();
-  if (article.title?.trim()) {
-    return `${article.title.trim()}${article.url ? `. Sursă: ${article.url}` : ""}`;
-  }
-  return article.url || "Știre fără conținut disponibil.";
+  if (article.title?.trim()) return article.title.trim();
+  return "Informații limitate disponibile din sursa articolului.";
 }
 
 function normalizeHashtags(value: unknown, fallback: string): string {
@@ -41,9 +39,34 @@ function normalizeHashtags(value: unknown, fallback: string): string {
   return fallback;
 }
 
-function normalizeSubtitles(value: unknown, script: string): SubtitleSegment[] {
+export function buildSubtitleSegmentsFromVoiceover(
+  voiceoverScript: string,
+  totalDuration = 45
+): SubtitleSegment[] {
+  const words = voiceoverScript.split(/\s+/).filter(Boolean);
+  const segments: SubtitleSegment[] = [];
+  let cursor = 0;
+
+  for (let i = 0; i < words.length; ) {
+    const chunkSize = Math.min(8, Math.max(4, 6 + (i % 3 === 0 ? 1 : 0)));
+    const chunkWords = words.slice(i, i + chunkSize);
+    i += chunkWords.length;
+    segments.push({ start: 0, end: 0, text: chunkWords.join(" ") });
+  }
+
+  if (!segments.length) return [];
+
+  const slice = totalDuration / segments.length;
+  return segments.map((segment, index) => ({
+    text: segment.text,
+    start: Math.round(index * slice * 10) / 10,
+    end: Math.round(Math.min(totalDuration, (index + 1) * slice) * 10) / 10,
+  }));
+}
+
+function normalizeSubtitles(value: unknown, voiceoverScript: string): SubtitleSegment[] {
   if (Array.isArray(value) && value.length > 0) {
-    return value
+    const parsed = value
       .filter(
         (s): s is SubtitleSegment =>
           typeof s === "object" &&
@@ -53,26 +76,22 @@ function normalizeSubtitles(value: unknown, script: string): SubtitleSegment[] {
       .map((s) => ({
         start: Number(s.start) || 0,
         end: Number(s.end) || 0,
-        text: String(s.text),
-      }));
+        text: String(s.text).trim(),
+      }))
+      .filter((s) => s.text);
+
+    if (parsed.length) {
+      return buildSubtitleSegmentsFromVoiceover(
+        parsed.map((s) => s.text).join(" "),
+        45
+      );
+    }
   }
-  return buildSubtitlesFromScript(script);
+  return buildSubtitleSegmentsFromVoiceover(voiceoverScript, 45);
 }
 
-function buildSubtitlesFromScript(script: string): SubtitleSegment[] {
-  const words = script.split(/\s+/).filter(Boolean);
-  const subtitles: SubtitleSegment[] = [];
-  let time = 0;
-  const chunkSize = 5;
-
-  for (let i = 0; i < words.length; i += chunkSize) {
-    const chunk = words.slice(i, i + chunkSize).join(" ");
-    const duration = Math.max(2, chunk.split(" ").length * 0.4);
-    subtitles.push({ start: time, end: time + duration, text: chunk });
-    time += duration;
-  }
-
-  return subtitles;
+function buildOutro(): string {
+  return "Urmărește-ne pentru actualizări.";
 }
 
 function generateMockScript(
@@ -80,18 +99,22 @@ function generateMockScript(
   defaultHashtags: string
 ): GeneratedScriptResult {
   const sourceText = getArticleSourceText(article);
-  const shortTitle =
-    article.title.length > 60 ? article.title.slice(0, 57) + "..." : article.title;
-  const contentSnippet = sourceText.slice(0, 300);
-
-  const voiceoverScript = `${shortTitle}. ${contentSnippet} Rămâi conectat pentru mai multe știri!`;
-  const subtitles = buildSubtitlesFromScript(voiceoverScript);
+  const headline =
+    article.title.length > 90 ? `${article.title.slice(0, 87)}...` : article.title;
+  const shortSummary = sourceText.slice(0, 220).trim();
+  const body = shortSummary || headline;
+  const voiceoverScript = clampVoiceoverLength(
+    `${headline}. ${body} ${buildOutro()}`
+  );
+  const subtitles = buildSubtitleSegmentsFromVoiceover(voiceoverScript, 45);
 
   return {
-    hook: `🔥 ${shortTitle}`,
+    hook: headline,
+    headline,
+    shortSummary,
     script: voiceoverScript,
-    tiktokTitle: shortTitle,
-    description: `${contentSnippet.slice(0, 150)}${contentSnippet.length > 150 ? "..." : ""}\n\n${defaultHashtags}`,
+    tiktokTitle: headline,
+    description: `${shortSummary.slice(0, 180)}\n\n${defaultHashtags}`,
     hashtags: defaultHashtags,
     subtitles,
     provider: "mock",
@@ -99,7 +122,8 @@ function generateMockScript(
 }
 
 async function generateWithOpenAI(
-  article: Article & { description?: string | null }
+  article: Article & { description?: string | null },
+  attempt = 1
 ): Promise<GeneratedScriptResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
@@ -107,17 +131,29 @@ async function generateWithOpenAI(
   const settings = await getSettings();
   const sourceText = getArticleSourceText(article);
 
-  const prompt = `Generează conținut TikTok în română pentru articolul:
-Titlu: ${article.title}
-Conținut: ${sourceText.slice(0, 2000)}
+  const prompt = `Generează conținut video de știri TikTok DOAR în limba română pentru articolul de mai jos.
+Reguli stricte:
+- NU inventa fapte care nu apar în text.
+- NU exagera titlul.
+- Dacă există doar titlu/descriere, rezumă doar ce există.
+- Stil jurnalistic, clar, profesionist, ca un prezentator de știri.
+- voiceoverScript trebuie să fie textul exact citit de voice-over (35-55 secunde).
+- subtitleSegments trebuie să fie exact fraze din voiceoverScript, 4-8 cuvinte/frază.
+- Tot conținutul trebuie în română.
 
-Returnează JSON cu:
-- hook (string)
-- script sau voiceoverScript (string, 30-60 sec voice-over)
-- tiktokTitle (string)
-- description sau tiktokDescription (string)
-- hashtags (string cu hashtag-uri separate prin spațiu, NU array)
-- subtitles (array cu {start, end, text})`;
+Titlu: ${article.title}
+Categorie: ${article.category}
+Text sursă: ${sourceText.slice(0, 2500)}
+
+Returnează JSON:
+{
+  "headline": "titlu scurt jurnalistic",
+  "shortSummary": "rezumat scurt factual",
+  "voiceoverScript": "text complet voice-over română",
+  "subtitleSegments": [{"text":"frază scurtă"}],
+  "tiktokDescription": "descriere scurtă",
+  "hashtags": "#stiri #romania ..."
+}`;
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -131,11 +167,12 @@ Returnează JSON cu:
         {
           role: "system",
           content:
-            "Ești un editor video pentru TikTok. Răspunde doar cu JSON valid. hashtags trebuie să fie un singur string, nu array.",
+            "Ești redactor video pentru o redacție de presă din România. Răspunde doar cu JSON valid, exclusiv în română.",
         },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
+      temperature: attempt > 1 ? 0.3 : 0.6,
     }),
   });
 
@@ -147,22 +184,39 @@ Returnează JSON cu:
   const data = await response.json();
   const parsed = JSON.parse(data.choices[0].message.content);
 
-  const voiceoverScript: string =
-    parsed.script || parsed.voiceoverScript || parsed.voice_over_script || "";
-  if (!voiceoverScript.trim()) {
-    throw new Error("OpenAI returned empty script");
+  const voiceoverScript = clampVoiceoverLength(
+    String(parsed.voiceoverScript || parsed.script || "").trim()
+  );
+
+  if (!voiceoverScript) {
+    throw new Error("OpenAI returned empty voiceoverScript");
   }
 
-  const tiktokDescription: string =
-    parsed.description || parsed.tiktokDescription || parsed.tiktok_description || "";
+  if (!isMostlyRomanian(voiceoverScript)) {
+    if (attempt < 2) {
+      console.warn(`[generateScript] Non-Romanian output detected, regenerating attempt=${attempt + 1}`);
+      return generateWithOpenAI(article, attempt + 1);
+    }
+    throw new Error("Voiceover script is not in Romanian");
+  }
+
+  const headline = String(parsed.headline || parsed.hook || article.title.slice(0, 90)).trim();
+  const shortSummary = String(parsed.shortSummary || voiceoverScript.slice(0, 220)).trim();
+  const tiktokDescription = String(
+    parsed.tiktokDescription || parsed.description || shortSummary
+  ).trim();
+
+  const subtitles = normalizeSubtitles(parsed.subtitleSegments || parsed.subtitles, voiceoverScript);
 
   return {
-    hook: String(parsed.hook || `🔥 ${article.title.slice(0, 60)}`),
+    hook: headline,
+    headline,
+    shortSummary,
     script: voiceoverScript,
-    tiktokTitle: String(parsed.tiktokTitle || parsed.tiktok_title || article.title.slice(0, 80)),
-    description: tiktokDescription || voiceoverScript.slice(0, 200),
+    tiktokTitle: headline,
+    description: `${tiktokDescription}\n\n${normalizeHashtags(parsed.hashtags, settings.defaultHashtags)}`,
     hashtags: normalizeHashtags(parsed.hashtags, settings.defaultHashtags),
-    subtitles: normalizeSubtitles(parsed.subtitles, voiceoverScript),
+    subtitles,
     provider: "openai",
   };
 }
@@ -174,26 +228,19 @@ export async function generateScript(
   const hasOpenAI = !!process.env.OPENAI_API_KEY?.trim();
 
   console.log(
-    `[generateScript] articleId=${article.id} title="${article.title.slice(0, 50)}" ` +
-      `hasContent=${!!article.content?.trim()} provider=${hasOpenAI ? "openai" : "mock"}`
+    `[generateScript] articleId=${article.id} title="${article.title.slice(0, 50)}" provider=${hasOpenAI ? "openai" : "mock"}`
   );
 
   if (hasOpenAI) {
     try {
       const result = await generateWithOpenAI(article);
-      console.log(`[generateScript] OpenAI success for articleId=${article.id}`);
+      console.log(`[generateScript] OpenAI success articleId=${article.id}`);
       return result;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[generateScript] OpenAI failed for articleId=${article.id}, falling back to mock: ${msg}`
-      );
+      console.warn(`[generateScript] OpenAI failed articleId=${article.id}, fallback mock: ${msg}`);
     }
-  } else {
-    console.log(`[generateScript] No OPENAI_API_KEY — using mock for articleId=${article.id}`);
   }
 
-  const mock = generateMockScript(article, settings.defaultHashtags);
-  console.log(`[generateScript] Mock generated for articleId=${article.id}`);
-  return mock;
+  return generateMockScript(article, settings.defaultHashtags);
 }

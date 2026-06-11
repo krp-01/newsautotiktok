@@ -20,6 +20,7 @@ interface Article {
   video: {
     videoPath: string;
     imageCount: number;
+    sourceVideoUsed: boolean;
     voiceoverSkipped: boolean;
     duration: number | null;
   } | null;
@@ -88,12 +89,14 @@ export default function ArticlesPage() {
       }
 
       const imgCount = videoData.imageCount ?? "?";
+      const sourceVideoLabel = videoData.sourceVideoUsed ? "video sursă: da" : "video sursă: nu";
       const voLabel = videoData.voiceoverSkipped
-        ? `Voice-over lipsă${videoData.voiceoverReason ? `: ${videoData.voiceoverReason}` : ""}`
-        : `Voice-over OK (${videoData.voiceoverProvider || "TTS"})`;
+        ? `voice-over: nu${videoData.voiceoverReason ? ` (${videoData.voiceoverReason})` : ""}`
+        : `voice-over: da (${videoData.voiceoverProvider || "TTS"})`;
+      const durationLabel = videoData.duration ? `${videoData.duration.toFixed(0)}s` : "?s";
       setActionState(articleId, {
         phase: "done",
-        message: `Gata — ${imgCount} imagini, ${voLabel}`,
+        message: `Gata — ${imgCount} imagini, ${sourceVideoLabel}, ${voLabel}, ${durationLabel}`,
       });
       await loadArticles();
 
@@ -185,7 +188,7 @@ export default function ArticlesPage() {
     <div>
       <Header
         title="Articles Manager"
-        description="Generează script + video dintr-un singur click"
+        description="Generează script jurnalistic + video profesional vertical"
         actions={
           <select
             value={filter}
@@ -227,7 +230,7 @@ export default function ArticlesPage() {
                       )}
                       {article.video && (
                         <span className="text-xs text-cyan-400">
-                          ✓ Video ({article.video.imageCount} img, {article.video.duration?.toFixed(0)}s)
+                          ✓ Video ({article.video.imageCount} img{article.video.sourceVideoUsed ? ", video sursă" : ""}, {article.video.duration?.toFixed(0)}s)
                         </span>
                       )}
                     </div>
@@ -250,7 +253,7 @@ export default function ArticlesPage() {
                           ) : (
                             <Wand2 className="h-3 w-3" />
                           )}
-                          Generate script + video
+                          Generate script + professional video
                         </button>
                       )}
                       {article.video && (

@@ -24,5 +24,36 @@ export async function getAudioDurationSeconds(audioPath: string): Promise<number
 
 export function estimateSpeechDuration(text: string): number {
   const words = text.split(/\s+/).filter(Boolean).length;
-  return Math.min(60, Math.max(30, words * 0.42));
+  return Math.min(60, Math.max(35, words * 0.42));
+}
+
+export async function getImageDimensions(
+  imagePath: string
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=p=0:s=x",
+        imagePath,
+      ],
+      { timeout: 15000 }
+    );
+    const [width, height] = stdout.trim().split("x").map(Number);
+    if (!width || !height) return null;
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
+
+export async function getVideoDurationSeconds(videoPath: string): Promise<number | null> {
+  return getAudioDurationSeconds(videoPath);
 }

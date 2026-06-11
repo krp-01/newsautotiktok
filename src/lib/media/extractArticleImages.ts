@@ -14,6 +14,13 @@ const SKIP_PATTERNS = [
   /tracking/i,
   /1x1/i,
   /spacer/i,
+  /banner/i,
+  /advert/i,
+  /ads/i,
+  /promo/i,
+  /placeholder/i,
+  /default/i,
+  /thumb_small/i,
 ];
 
 const MIN_URL_LENGTH = 20;
@@ -23,9 +30,19 @@ function normalizeUrl(url: string, baseUrl: string): string | null {
     if (!url || url.startsWith("data:")) return null;
     const resolved = new URL(url, baseUrl);
     if (!["http:", "https:"].includes(resolved.protocol)) return null;
-    return resolved.href.split("#")[0];
+    resolved.hash = "";
+    return resolved.href;
   } catch {
     return null;
+  }
+}
+
+function imageDedupeKey(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.hostname}${parsed.pathname}`.toLowerCase().replace(/-\d+x\d+(?=\.\w+$)/, "");
+  } catch {
+    return url.toLowerCase();
   }
 }
 
@@ -35,6 +52,7 @@ function isRelevantImageUrl(url: string): boolean {
   const lower = url.toLowerCase();
   if (lower.endsWith(".svg")) return false;
   if (lower.includes("width=1") || lower.includes("height=1")) return false;
+  if (lower.includes("w=16") || lower.includes("h=16")) return false;
   return true;
 }
 
@@ -42,12 +60,12 @@ function extractFromHtml(html: string, baseUrl: string): string[] {
   const $ = cheerio.load(html);
   const urls: string[] = [];
 
-  $('meta[property="og:image"], meta[name="og:image"], meta[property="twitter:image"], meta[name="twitter:image"]').each(
-    (_, el) => {
-      const content = $(el).attr("content");
-      if (content) urls.push(content);
-    }
-  );
+  $(
+    'meta[property="og:image"], meta[name="og:image"], meta[property="twitter:image"], meta[name="twitter:image"]'
+  ).each((_, el) => {
+    const content = $(el).attr("content");
+    if (content) urls.push(content);
+  });
 
   $("img").each((_, el) => {
     const src =
@@ -59,9 +77,17 @@ function extractFromHtml(html: string, baseUrl: string): string[] {
 
     const srcset = $(el).attr("srcset");
     if (srcset) {
-      const first = srcset.split(",")[0]?.trim().split(/\s+/)[0];
-      if (first) urls.push(first);
+      const candidates = srcset
+        .split(",")
+        .map((part) => part.trim().split(/\s+/)[0])
+        .filter(Boolean);
+      if (candidates.length) urls.push(candidates[candidates.length - 1]);
     }
+  });
+
+  $("figure img, article img, .article img, .content img").each((_, el) => {
+    const src = $(el).attr("src") || $(el).attr("data-src");
+    if (src) urls.unshift(src);
   });
 
   return urls
@@ -86,33 +112,37 @@ async function fetchArticleHtml(url: string): Promise<string | null> {
 }
 
 export async function extractArticleImages(article: Article): Promise<string[]> {
-  const found = new Set<string>();
+  const ordered: string[] = [];
+  const seen = new Set<string>();
 
-  if (article.imageUrl) {
-    const normalized = normalizeUrl(article.imageUrl, article.url);
-    if (normalized) found.add(normalized);
+  function add(url: string | null | undefined) {
+    if (!url) return;
+    const normalized = normalizeUrl(url, article.url);
+    if (!normalized || !isRelevantImageUrl(normalized)) return;
+    const key = imageDedupeKey(normalized);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(normalized);
   }
 
+  add(article.imageUrl);
+
   if (article.content) {
-    for (const url of extractFromHtml(article.content, article.url)) {
-      found.add(url);
-    }
-    const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
-    let match;
-    while ((match = imgRegex.exec(article.content)) !== null) {
-      const normalized = normalizeUrl(match[1], article.url);
-      if (normalized && isRelevantImageUrl(normalized)) found.add(normalized);
-    }
+    for (const url of extractFromHtml(article.content, article.url)) add(url);
   }
 
   const pageHtml = await fetchArticleHtml(article.url);
   if (pageHtml) {
-    for (const url of extractFromHtml(pageHtml, article.url)) {
-      found.add(url);
-    }
+    for (const url of extractFromHtml(pageHtml, article.url)) add(url);
   }
 
-  const unique = [...found];
-  console.log(`[extractArticleImages] articleId=${article.id} found ${unique.length} image URL(s)`);
-  return unique.slice(0, 12);
+  console.log(`[extractArticleImages] articleId=${article.id} found ${ordered.length} image URL(s)`);
+  return ordered;
+}
+
+export function selectImageCount(available: number): number {
+  if (available <= 0) return 0;
+  if (available <= 3) return available;
+  if (available <= 8) return available;
+  return Math.min(12, Math.max(8, available));
 }

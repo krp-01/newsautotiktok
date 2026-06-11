@@ -15,6 +15,9 @@ interface Source {
   category: string;
   active: boolean;
   autoMode: boolean;
+  allowVideoExtraction: boolean;
+  allowedVideoDomains: string;
+  useSourceVideos: boolean;
   createdAt: string;
 }
 
@@ -30,6 +33,9 @@ export default function SourcesPage() {
     category: "general",
     active: true,
     autoMode: false,
+    allowVideoExtraction: false,
+    allowedVideoDomains: "",
+    useSourceVideos: false,
   });
 
   async function loadSources() {
@@ -52,7 +58,17 @@ export default function SourcesPage() {
     });
     if (res.ok) {
       setModalOpen(false);
-      setForm({ name: "", baseUrl: "", rssUrl: "", category: "general", active: true, autoMode: false });
+      setForm({
+        name: "",
+        baseUrl: "",
+        rssUrl: "",
+        category: "general",
+        active: true,
+        autoMode: false,
+        allowVideoExtraction: false,
+        allowedVideoDomains: "",
+        useSourceVideos: false,
+      });
       loadSources();
     }
   }
@@ -117,6 +133,7 @@ export default function SourcesPage() {
                 <th>RSS URL</th>
                 <th>Categorie</th>
                 <th>Status</th>
+                <th>Video</th>
                 <th>Auto</th>
                 <th>Acțiuni</th>
               </tr>
@@ -130,6 +147,11 @@ export default function SourcesPage() {
                   <td>
                     <span className={source.active ? "text-emerald-400" : "text-zinc-500"}>
                       {source.active ? "Activ" : "Inactiv"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={source.useSourceVideos ? "text-cyan-400" : "text-zinc-500"}>
+                      {source.useSourceVideos ? "Da" : "Nu"}
                     </span>
                   </td>
                   <td>
@@ -203,6 +225,31 @@ export default function SourcesPage() {
               className="input-field"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            <input
+              type="checkbox"
+              checked={form.useSourceVideos}
+              onChange={(e) => setForm({ ...form, useSourceVideos: e.target.checked })}
+            />
+            Folosește video-uri din sursă (dacă sunt autorizate)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            <input
+              type="checkbox"
+              checked={form.allowVideoExtraction}
+              onChange={(e) => setForm({ ...form, allowVideoExtraction: e.target.checked })}
+            />
+            Permite extragerea video din pagină
+          </label>
+          <div>
+            <label className="label">Domenii video permise (CSV)</label>
+            <input
+              className="input-field"
+              value={form.allowedVideoDomains}
+              onChange={(e) => setForm({ ...form, allowedVideoDomains: e.target.value })}
+              placeholder="example.com, media.example.com"
             />
           </div>
           <label className="flex items-center gap-2 text-sm text-zinc-400">
