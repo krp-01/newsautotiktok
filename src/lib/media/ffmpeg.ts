@@ -4,7 +4,19 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 
 export const FFMPEG_NOT_FOUND_MESSAGE =
-  "FFmpeg not found. On Railway, make sure nixpacks.toml includes ffmpeg.";
+  "FFmpeg not found. On Railway use Dockerfile (includes ffmpeg) or set nixpacks.toml aptPkgs/nixPkgs with ffmpeg, then redeploy.";
+
+async function logFfmpegDiagnostics(context: string): Promise<void> {
+  console.log(`[ffmpeg] PATH=${process.env.PATH || "(empty)"}`);
+
+  const locator = process.platform === "win32" ? "where" : "which";
+  try {
+    const { stdout } = await execFileAsync(locator, ["ffmpeg"], { timeout: 5000 });
+    console.log(`[ffmpeg] ${context} ${locator} ffmpeg: ${stdout.trim() || "(not found)"}`);
+  } catch {
+    console.error(`[ffmpeg] ${context} ${locator} ffmpeg: not found`);
+  }
+}
 
 export interface RunFfmpegOptions {
   timeout?: number;
@@ -18,7 +30,7 @@ function formatCommand(args: string[]): string {
 
 export async function verifyFfmpegAvailable(context = "video generation"): Promise<void> {
   console.log(`[ffmpeg] Checking availability for ${context}`);
-  console.log(`[ffmpeg] PATH=${process.env.PATH || "(empty)"}`);
+  await logFfmpegDiagnostics(context);
 
   try {
     const { stdout, stderr } = await execFileAsync("ffmpeg", ["-version"], {
@@ -30,7 +42,7 @@ export async function verifyFfmpegAvailable(context = "video generation"): Promi
     console.log(`[ffmpeg] ffmpeg -version: ${firstLine}`);
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
-    console.error(`[ffmpeg] PATH=${process.env.PATH || "(empty)"}`);
+    await logFfmpegDiagnostics(context);
     console.error(`[ffmpeg] verify failed during ${context}: ${err.message}`);
 
     if (err.code === "ENOENT") {

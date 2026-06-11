@@ -1,10 +1,11 @@
-# Railway/Nixpacks: Node.js 20 + FFmpeg for video generation.
+# Fallback when Dockerfile is not used. Prefer Dockerfile on Railway for FFmpeg at runtime.
 [variables]
 NPM_CONFIG_PRODUCTION = ""
 NPM_CONFIG_OMIT = "dev"
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "ffmpeg"]
+aptPkgs = ["ffmpeg"]
 
 [phases.install]
 cmds = ["npm ci --include=dev"]

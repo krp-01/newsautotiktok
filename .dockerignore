@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+dev.db
+dev.db-journal
+public/generated
+coverage
+*.md
+.cursor
+.agent-transcripts
