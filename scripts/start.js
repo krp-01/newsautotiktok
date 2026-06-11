@@ -1,5 +1,8 @@
 require("dotenv/config");
 
+const { spawn, spawnSync } = require("child_process");
+const path = require("path");
+
 const databaseUrl = process.env.DATABASE_URL?.trim();
 
 if (!databaseUrl) {
@@ -14,26 +17,48 @@ if (databaseUrl.startsWith("file:") || /sqlite/i.test(databaseUrl)) {
   process.exit(1);
 }
 
-const { spawn } = require("child_process");
-const path = require("path");
+function runPrismaDbPush() {
+  const prismaCli = path.join(path.dirname(require.resolve("prisma/package.json")), "build", "index.js");
 
-const port = process.env.PORT || "3000";
-const nextBin = path.join(require.resolve("next/package.json"), "..", "dist", "bin", "next");
+  console.log("[start] Syncing database schema (prisma db push)...");
 
-const child = spawn(process.execPath, [nextBin, "start", "-H", "0.0.0.0", "-p", port], {
-  stdio: "inherit",
-  env: process.env,
-});
+  const result = spawnSync(process.execPath, [prismaCli, "db", "push"], {
+    stdio: "inherit",
+    env: process.env,
+  });
 
-child.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
+  if (result.status !== 0) {
+    console.error(
+      "[start] prisma db push failed. Verify DATABASE_URL and that Postgres is reachable from the running service."
+    );
+    process.exit(result.status ?? 1);
   }
-  process.exit(code ?? 0);
-});
+}
 
-child.on("error", (error) => {
-  console.error("[start] Failed to launch Next.js:", error.message);
-  process.exit(1);
-});
+function startNextServer() {
+  const port = process.env.PORT || "3000";
+  const nextBin = path.join(require.resolve("next/package.json"), "..", "dist", "bin", "next");
+
+  console.log(`[start] Starting Next.js on 0.0.0.0:${port}`);
+
+  const child = spawn(process.execPath, [nextBin, "start", "-H", "0.0.0.0", "-p", port], {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+
+  child.on("error", (error) => {
+    console.error("[start] Failed to launch Next.js:", error.message);
+    process.exit(1);
+  });
+}
+
+runPrismaDbPush();
+startNextServer();
