@@ -1,3 +1,19 @@
+require("dotenv/config");
+
+const databaseUrl = process.env.DATABASE_URL?.trim();
+
+if (!databaseUrl) {
+  console.error(
+    "[start] DATABASE_URL is not set. Link Railway Postgres and copy DATABASE_URL into service variables."
+  );
+  process.exit(1);
+}
+
+if (databaseUrl.startsWith("file:") || /sqlite/i.test(databaseUrl)) {
+  console.error("[start] SQLite is not supported. Use a postgresql:// DATABASE_URL.");
+  process.exit(1);
+}
+
 const { spawn } = require("child_process");
 const path = require("path");
 
