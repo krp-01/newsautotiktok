@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+}
+
+enum ArticleStatus {
+  NEW
+  SCRIPT_GENERATED
+  VIDEO_GENERATED
+  READY_TO_POST
+  POSTED
+  FAILED
+}
+
+enum JobType {
+  FETCH_NEWS
+  GENERATE_SCRIPT
+  GENERATE_VIDEO
+  POST_TO_TIKTOK
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum TikTokAccountStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum TikTokPostStatus {
+  PENDING
+  POSTED
+  FAILED
+}
+
+enum VideoTemplateStyle {
+  MINIMAL
+  BOLD
+  CLASSIC
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(EDITOR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Source {
+  id        String    @id @default(cuid())
+  name      String
+  baseUrl   String
+  rssUrl    String
+  category  String    @default("general")
+  active    Boolean   @default(true)
+  autoMode  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  articles  Article[]
+}
+
+model Article {
+  id          String        @id @default(cuid())
+  title       String
+  url         String        @unique
+  description String?
+  content     String?
+  imageUrl    String?
+  category    String        @default("general")
+  status      ArticleStatus @default(NEW)
+  approved    Boolean       @default(false)
+  sourceId    String
+  source      Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  script      GeneratedScript?
+  video       GeneratedVideo?
+  tiktokPosts TikTokPost[]
+}
+
+model GeneratedScript {
+  id               String   @id @default(cuid())
+  articleId        String   @unique
+  article          Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  hook             String
+  script           String
+  voiceoverScript  String   @default("")
+  tiktokTitle      String
+  description      String
+  hashtags         String
+  subtitles        String
+  voiceoverSkipped Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model GeneratedVideo {
+  id               String   @id @default(cuid())
+  articleId        String   @unique
+  article          Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  videoPath        String
+  audioPath        String?
+  duration         Float?
+  imageCount       Int      @default(0)
+  downloadedImages String?
+  voiceoverSkipped Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TikTokAccount {
+  id                    String              @id @default(cuid())
+  displayName           String
+  username              String
+  openId                String              @unique
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  status                TikTokAccountStatus @default(ACTIVE)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  posts                 TikTokPost[]
+}
+
+model TikTokPost {
+  id            String           @id @default(cuid())
+  articleId     String
+  article       Article          @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       TikTokAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status        TikTokPostStatus @default(PENDING)
+  tiktokVideoId String?
+  errorMessage  String?
+  postedAt      DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  type         JobType
+  status       JobStatus @default(PENDING)
+  payload      String?
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model AppSettings {
+  id                  String             @id @default("default")
+  publicationName     String             @default("NewsAutoTikTok")
+  logoPath            String?
+  defaultHashtags     String             @default("#stiri #news #romania")
+  autoPosting         Boolean            @default(false)
+  autoApprove         Boolean            @default(false)
+  fetchIntervalMinutes Int               @default(60)
+  videoTemplateStyle  VideoTemplateStyle @default(BOLD)
+  watermarkEnabled    Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String?
+  entityId  String?
+  details   String?
+  userId    String?
+  createdAt DateTime @default(now())
+}
